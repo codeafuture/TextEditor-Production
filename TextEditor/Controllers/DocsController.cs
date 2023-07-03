@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using TextEditor.Data;
+using TextEditor.Data.Services;
 using TextEditor.Models;
 
 namespace TextEditor.Controllers
@@ -15,21 +16,19 @@ namespace TextEditor.Controllers
     [Authorize]
     public class DocsController : Controller
     {
-        private readonly ApplicationDbContext _context;
-
-        public DocsController(ApplicationDbContext context)
+        private readonly IDocsService _service;
+        public DocsController(IDocsService service)
         {
-            _context = context;
+            _service = service;
         }
 
         // GET: Docs
         public async Task<IActionResult> Index()
         {
-            var applicationDbContext = from c in _context.Docs
-                                       select c;
+            var applicationDbContext = await _service.GetAll();
             applicationDbContext = applicationDbContext.Where(a => a.UserId == User.FindFirstValue(ClaimTypes.NameIdentifier));
 
-            return View(await applicationDbContext.Include(d => d.User).ToListAsync());
+            return View(applicationDbContext);
         }
 
        
@@ -50,8 +49,7 @@ namespace TextEditor.Controllers
         {
             if (ModelState.IsValid)
             {
-                _context.Add(doc);
-                await _context.SaveChangesAsync();
+                await _service.Add(doc);
                 return RedirectToAction(nameof(Index));
             }
             
@@ -61,12 +59,12 @@ namespace TextEditor.Controllers
         // GET: Docs/Edit/5
         public async Task<IActionResult> Edit(int? id)
         {
-            if (id == null || _context.Docs == null)
+            if (id == null)
             {
                 return NotFound();
             }
 
-            var doc = await _context.Docs.FindAsync(id);
+            var doc = await _service.GetById(id);
             if (doc == null)
             {
                 return NotFound();
@@ -92,40 +90,23 @@ namespace TextEditor.Controllers
             }
 
             if (ModelState.IsValid)
-            {
-                try
-                {
-                    _context.Update(doc);
-                    await _context.SaveChangesAsync();
-                }
-                catch (DbUpdateConcurrencyException)
-                {
-                    if (!DocExists(doc.Id))
-                    {
-                        return NotFound();
-                    }
-                    else
-                    {
-                        throw;
-                    }
-                }
+            {              
+                await _service.Update(doc);               
                 return RedirectToAction(nameof(Index));
             }
-            ViewData["UserId"] = new SelectList(_context.Users, "Id", "Id", doc.UserId);
+            
             return View(doc);
         }
 
         // GET: Docs/Delete/5
         public async Task<IActionResult> Delete(int? id)
         {
-            if (id == null || _context.Docs == null)
+            if (id == null )
             {
                 return NotFound();
             }
 
-            var doc = await _context.Docs
-                .Include(d => d.User)
-                .FirstOrDefaultAsync(m => m.Id == id);
+            var doc = await _service.GetById(id);
             if (doc == null)
             {
                 return NotFound();
@@ -143,23 +124,17 @@ namespace TextEditor.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
-            if (_context.Docs == null)
-            {
-                return Problem("Entity set 'ApplicationDbContext.Docs'  is null.");
-            }
-            var doc = await _context.Docs.FindAsync(id);
+
+            var doc = await _service.GetById(id);
             if (doc != null)
             {
-                _context.Docs.Remove(doc);
+                await _service.Delete(doc);
             }
             
-            await _context.SaveChangesAsync();
+            
             return RedirectToAction(nameof(Index));
         }
 
-        private bool DocExists(int id)
-        {
-          return (_context.Docs?.Any(e => e.Id == id)).GetValueOrDefault();
-        }
+       
     }
 }
